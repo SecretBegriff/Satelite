@@ -4,6 +4,8 @@ from dash.dependencies import Input, Output
 # Layout de la app
 app = dash.Dash(__name__, use_pages=True)
 
+server = app.server
+
 from callbacks_def import register_callbacks 
 
 app.layout = html.Div([
