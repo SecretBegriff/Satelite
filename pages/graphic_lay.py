@@ -6,7 +6,7 @@ from datams100 import Decoder
 
 dash.register_page(__name__, path = "/graphic_layout")
 decoder = Decoder()
-obc_magneto, obc_gyro = decoder.interactive_graph()
+obc_magneto, obc_gyro, p31u_board = decoder.interactive_graph()
 
 layout = html.Div(children=[
     html.H1("Pagina"),
@@ -29,5 +29,9 @@ layout = html.Div(children=[
         html.Img(id="grafica-7"),
         dcc.Graph(id="grafica-8", figure= obc_magneto),
         dcc.Graph(id="grafica-9", figure= obc_gyro),
-    ],className="graph-container")
+    ],className="graph-container"),
+    html.Div([
+        html.H2("Gráficas de EPS"),
+        dcc.Graph(id="grafica-10", figure= p31u_board)
+    ]),
 ])

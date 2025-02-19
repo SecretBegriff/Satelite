@@ -9,6 +9,8 @@ from matplotlib.patches import Wedge, Circle
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import plotly.io as pio
 import plotly.graph_objects as go
+import math
+import plotly.express as px
 
 
 class Decoder():
@@ -87,7 +89,9 @@ class Decoder():
         data = self._build_data_dict()
         # Obtenemos los gráficos de OBC y retornamos el gráfico interactivo (asumido como el cuarto elemento)
         _, _, _, obc_magneto, obc_gyro = self.obc_graphs(data)
-        return obc_magneto, obc_gyro
+        p31u_board = self.eps_graphs(data)
+
+        return obc_magneto, obc_gyro, p31u_board
     
     def ax100_graphs(self, data):
         #Crear figuras de AX100 
@@ -149,20 +153,25 @@ class Decoder():
         return obc_temp_a, obc_cur_pwm, obc_clock, obc_magneto, obc_gyro
     
     def eps_graphs(self, data):
-        eps_vboost = gauge_chart(data['eps_hk']['vboost'], title="Vboost")
-        eps_vbatt = gauge_chart(data['eps_hk']['vbatt'], title="Vbatt")
-        eps_curout = gauge_chart(data['eps_hk']['curout'], title="Curout")
-        eps_curin = gauge_chart(data['eps_hk']['curin'], title="Curin")
-        eps_cursun = gauge_chart(data['eps_hk']['cursun'], title="Cursun")
-        eps_cursys = gauge_chart(data['eps_hk']['cursys'], title="Cursys")
-        eps_temp = gauge_chart(data['eps_hk']['temp'], title="Temperature")
-        eps_output = gauge_chart(data['eps_hk']['output'], title="Output")
-        eps_wdt_i2c_time_left = gauge_chart(data['eps_hk']['wdt_i2c_time_left'], title="WDT I2C Time Left")
-        eps_wdt_gnd_time_left = gauge_chart(data['eps_hk']['wdt_gnd_time_left'], title="WDT GND Time Left")
-        eps_counter_wdt_gnd = gauge_chart(data['eps_hk']['counter_wdt_gnd'], title="Counter WDT GND")
-        eps_boot_cause = gauge_chart(data['eps_hk']['boot_cause'], title="Boot Cause")
+        # general variables
+        ambience_tempConst = 25.00 # ambience constant unit = Celsius
+        def_temp = float(0) # default temperature
+        def_temp = ambience_tempConst - 5 # Hypothetical board overall temperature, according to ambience
 
-        return 0
+        # main constants
+        EPS_HK_TEMP_T1 = 18
+        EPS_HK_TEMP_T2 = 25
+        EPS_HK_TEMP_T3 = 36
+        EPS_HK_TEMP_T4 = data['eps_hk']['temp'] # Battery temperature, sensor T4
+
+        # board matrix, initialize default temperatures for all cells
+        board_matrix = np.full((27, 26), def_temp, dtype=float)
+        # -------------------------------------------------------------
+        # make board and show my plot
+        board_p31u = makeBoard(EPS_HK_TEMP_T1, EPS_HK_TEMP_T2, EPS_HK_TEMP_T3, EPS_HK_TEMP_T4, board_matrix)
+        p31u_heatmap = plot_heatmap(board_p31u)
+
+        return p31u_heatmap
 
 def read_file(ruta):
     file = open(ruta, "rb")
@@ -322,6 +331,99 @@ def plot_3d_oriented_cube(mag_x, mag_y, mag_z, title="Titulo", clr="blue"):
     )
 
     return fig
+
+        #           for HEATMAP
+    # ______---GENERATE BOARD---______
+def makeBoard(T1, T2, T3, T4, board_matrix):
+    # define the sensor temperatures
+    board_matrix[23][4] = T1  # T1
+    board_matrix[0][7] = T2  # T2
+    board_matrix[23][21] = T3  # T3
+    board_matrix[13][23] = T4  # T4
+
+    # fill matrix with values using idw
+    for i in range(27):
+        for j in range(26):
+            if (not isASensor(i, j)):
+                board_matrix[i][j] = idw(i, j, board_matrix)
+    
+    return board_matrix
+    
+
+# _____--- MATPLOTLIB ---______
+# matplot enters the chat
+def plot_heatmap(board_matrix):
+    fig = px.imshow(
+        board_matrix,
+        labels=dict(x="Eje X", y="Eje Y", color="Temperatura"),
+        x=[f"Columna {i}" for i in range(board_matrix.shape[1])],
+        y=[f"Fila {i}" for i in range(board_matrix.shape[0])],
+        color_continuous_scale='plasma',
+        origin='lower',
+        text_auto=True
+    )
+    fig.update_layout(title="Mapa de Calor de la Placa")
+    return fig
+
+
+
+# is the coordinate within the sensor list? (boolean function)
+def isASensor(i, j):
+    if (i == 23 and j == 4) or (i == 0 and j == 7) or (i == 23 and j == 21) or (i == 13 and j == 23):
+        return True
+    else:
+        return False
+
+# Euclidean distance function
+def euDist(array1, array2):
+    xdiff = array2[0] - array1[0]
+    ydiff = array2[1] - array1[1]
+    return math.sqrt(abs((pow(xdiff, 2)) + (pow(ydiff, 2))))
+
+
+# ______---IDW---______
+# the Inverse Distance Weighted Interpolation formula,
+# What it does? ... returns an approximate float value of the temperature relative to known points
+
+# Inverse Distance function
+def weight_i(arr):
+    beta = 1 # measures how important the distance is. Values = 0, 1 or 2
+    return (1/(pow(arr[3], beta)))
+
+# Product of Inverse Distance and the respective Value. Funciton
+def wi_zi(arr):
+    return (arr[4] * arr[2]) # weight times value
+
+# Whole IDW function
+def idw(i, j, board_matrix):
+    # constants
+    weight_sum = 0.0 # weight
+    weight_z_sum = 0.0 # wi times zi (z is the value of the current cell)
+    idw_res = 0.0 # result 
+
+    # sensor data basis:
+    # (known points)
+    #              x,  y,      value,  dist(u, i) wi wizi
+    t1 = np.array([4, 23, board_matrix[23][4], 0, 0, 0], dtype=float)
+    t2 = np.array([7, 0, board_matrix[0][7], 0, 0, 0], dtype=float)
+    t3 = np.array([21, 23, board_matrix[23][21], 0, 0, 0], dtype=float)
+    t4 = np.array([23, 13, board_matrix[13][23], 0, 0, 0], dtype=float)
+
+    # unknown point (given, to determine)
+    upoint = np.array([j, i, 0, 0, 0, 0], dtype=float)
+    
+    masterArray = np.array([t1, t2, t3, t4]) # array to fill the data from the temp. sensors
+    
+    for i in masterArray:
+        i[3] = euDist(i, upoint) # saves the distance(CurrentPoint to  UnknownPoint)
+        i[4] = weight_i(i) # saves the inverse distance value (weight)
+        i[5] = wi_zi(i) # saves the product of the i-point value and the inverse distance (weight)
+        # for overall sums
+        weight_sum += i[4]  
+        weight_z_sum += i[5]
+
+    idw_res = weight_z_sum/weight_sum
+    return idw_res
 
 
 def fig_to_uri(fig, anim=None, fmt=None):

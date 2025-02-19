@@ -5,7 +5,6 @@ from dash.dependencies import Input, Output
 app = dash.Dash(__name__, use_pages=True)
 server = app.server
 
-server = app.server
 
 from callbacks_def import register_callbacks 
 

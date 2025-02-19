@@ -15,7 +15,8 @@ def register_callbacks(app):
      Output("grafica-6", "src"),
      Output("grafica-7", "src"),
      Output("grafica-8", "figure"),
-     Output("grafica-9", "figure")],
+     Output("grafica-9", "figure"),
+     Output("grafica-10", "figure")],
     [Input("update-button", "n_clicks")])
 
     def update_graphs(n_clicks):
@@ -30,12 +31,12 @@ def register_callbacks(app):
              fig4, fig5, fig6,
              fig7)  = decoder.decode_to_graph()
             
-            (fig8, fig9) = decoder.interactive_graph()
+            (fig8, fig9, fig10) = decoder.interactive_graph()
 
             # Convertir figuras a base64 y devolver
             return (datams100.fig_to_uri(fig1), datams100.fig_to_uri(fig2), datams100.fig_to_uri(fig3), 
                     datams100.fig_to_uri(fig4), datams100.fig_to_uri(fig5), datams100.fig_to_uri(fig6),
-                    datams100.fig_to_uri(fig7), fig8, fig9)
+                    datams100.fig_to_uri(fig7), fig8, fig9, fig10)
         else:
             return tuple([""] * 9)
         
