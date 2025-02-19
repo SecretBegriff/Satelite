@@ -1,0 +1,8 @@
+dash==2.18.2
+plotly==6.0.0
+numpy==2.2.2
+matplotlib==3.10.0
+json
+io
+base64
+struct
